@@ -11,6 +11,7 @@ import (
 	"github.com/lucasvieira/traefik-auth-code-middleware/internal/notification/discord"
 	"github.com/lucasvieira/traefik-auth-code-middleware/internal/notification/telegram"
 	"github.com/lucasvieira/traefik-auth-code-middleware/internal/store"
+	"github.com/lucasvieira/traefik-auth-code-middleware/internal/templates"
 	"github.com/lucasvieira/traefik-auth-code-middleware/internal/utils"
 
 	"github.com/urfave/cli/v2"
@@ -157,7 +158,7 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusUnauthorized)
 	w.Header().Set("Content-Type", "text/html")
-	if err := loginTmpl.Execute(w, PageData{RedirectURL: redirectURL}); err != nil {
+	if err := templates.LoginTmpl.Execute(w, templates.PageData{RedirectURL: redirectURL}); err != nil {
 		log.Printf("Template error: %v", err)
 	}
 }
@@ -169,7 +170,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	redirectURL := r.URL.Query().Get("redirect_url")
 	w.Header().Set("Content-Type", "text/html")
-	loginTmpl.Execute(w, PageData{RedirectURL: redirectURL})
+	templates.LoginTmpl.Execute(w, templates.PageData{RedirectURL: redirectURL})
 }
 
 func requestCodeHandler(w http.ResponseWriter, r *http.Request) {
@@ -214,7 +215,7 @@ func requestCodeHandler(w http.ResponseWriter, r *http.Request) {
 		timeSinceCreation := codeExpiration - existing.ExpiresAt.Sub(time.Now())
 		if timeSinceCreation < 1*time.Minute {
 			w.WriteHeader(http.StatusTooManyRequests)
-			loginTmpl.Execute(w, PageData{Error: "Please wait before requesting a new code", RedirectURL: redirectURL})
+			templates.LoginTmpl.Execute(w, templates.PageData{Error: "Please wait before requesting a new code", RedirectURL: redirectURL})
 			return
 		}
 	}
@@ -228,11 +229,11 @@ func requestCodeHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("Failed to send code to %s: %v", ip, err)
 		w.WriteHeader(http.StatusInternalServerError)
-		loginTmpl.Execute(w, PageData{Error: "Failed to send notification", RedirectURL: redirectURL})
+		templates.LoginTmpl.Execute(w, templates.PageData{Error: "Failed to send notification", RedirectURL: redirectURL})
 		return
 	}
 
-	verifyTmpl.Execute(w, PageData{Message: "Code sent!", RedirectURL: redirectURL})
+	templates.VerifyTmpl.Execute(w, templates.PageData{Message: "Code sent!", RedirectURL: redirectURL})
 }
 
 func verifyCodeHandler(w http.ResponseWriter, r *http.Request) {
@@ -258,7 +259,7 @@ func verifyCodeHandler(w http.ResponseWriter, r *http.Request) {
 
 	if data == nil {
 		w.WriteHeader(http.StatusUnauthorized)
-		loginTmpl.Execute(w, PageData{Error: "Code expired or not requested", RedirectURL: redirectURL})
+		templates.LoginTmpl.Execute(w, templates.PageData{Error: "Code expired or not requested", RedirectURL: redirectURL})
 		return
 	}
 
@@ -267,11 +268,11 @@ func verifyCodeHandler(w http.ResponseWriter, r *http.Request) {
 		if data.Attempts > 5 {
 			st.DeleteCode(ip)
 			w.WriteHeader(http.StatusForbidden)
-			loginTmpl.Execute(w, PageData{Error: "Too many attempts", RedirectURL: redirectURL})
+			templates.LoginTmpl.Execute(w, templates.PageData{Error: "Too many attempts", RedirectURL: redirectURL})
 			return
 		}
 		w.WriteHeader(http.StatusUnauthorized)
-		verifyTmpl.Execute(w, PageData{Error: "Invalid code", RedirectURL: redirectURL})
+		templates.VerifyTmpl.Execute(w, templates.PageData{Error: "Invalid code", RedirectURL: redirectURL})
 		return
 	}
 

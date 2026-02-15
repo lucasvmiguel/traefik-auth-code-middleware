@@ -1,4 +1,4 @@
-package main
+package templates
 
 import "html/template"
 
@@ -201,6 +201,6 @@ const verifyHTML = `
 `
 
 var (
-	loginTmpl  = template.Must(template.New("login").Parse(loginHTML))
-	verifyTmpl = template.Must(template.New("verify").Parse(verifyHTML))
+	LoginTmpl  = template.Must(template.New("login").Parse(loginHTML))
+	VerifyTmpl = template.Must(template.New("verify").Parse(verifyHTML))
 )
