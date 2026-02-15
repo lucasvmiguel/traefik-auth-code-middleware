@@ -9,6 +9,7 @@ import (
 
 	"github.com/lucasvieira/traefik-auth-code-middleware/internal/notification"
 	"github.com/lucasvieira/traefik-auth-code-middleware/internal/notification/discord"
+	"github.com/lucasvieira/traefik-auth-code-middleware/internal/notification/logger"
 	"github.com/lucasvieira/traefik-auth-code-middleware/internal/notification/telegram"
 	"github.com/lucasvieira/traefik-auth-code-middleware/internal/store"
 	"github.com/lucasvieira/traefik-auth-code-middleware/internal/templates"
@@ -102,7 +103,7 @@ func run(c *cli.Context) error {
 		notifier = discord.New(discordWebhook)
 	} else {
 		log.Println("WARNING: No notification channel configured. Codes will be logged.")
-		notifier = &logNotifier{}
+		notifier = logger.New()
 	}
 
 	mux := http.NewServeMux()
@@ -114,13 +115,6 @@ func run(c *cli.Context) error {
 	addr := ":" + port
 	log.Printf("Starting middleware on %s", addr)
 	return http.ListenAndServe(addr, mux)
-}
-
-type logNotifier struct{}
-
-func (l *logNotifier) SendCode(code, ip string) error {
-	log.Printf("CODE GENERATED for %s: %s", ip, code)
-	return nil
 }
 
 // Handlers
