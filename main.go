@@ -62,6 +62,13 @@ func main() {
 //     No, that would mess up the content type.
 //     Better approach: Redirect to /auth/login.
 func authHandler(w http.ResponseWriter, r *http.Request) {
+	// 0. Whitelist /auth/ paths to prevent infinite redirect loops.
+	// When valid, Traefik will forward the request to the router handling /auth/
+	if uri := r.Header.Get("X-Forwarded-Uri"); strings.HasPrefix(uri, "/auth/") {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	// 1. Check Cookie.
 	cookie, err := r.Cookie(config.CookieName)
 	if err == nil && store.IsSessionValid(cookie.Value) {

@@ -48,7 +48,9 @@ services:
       - SESSION_DURATION=720h # 30 days
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.auth-middleware.rule=Host(`auth.yourdomain.com`)" # Optional: to access debug/login directly if needed, but not required for middleware only usage.
+      # 1. Router for the Auth UI pages (/auth/*)
+      - "traefik.http.routers.auth-server.rule=PathPrefix(`/auth/`)"
+      - "traefik.http.routers.auth-server.service=auth-middleware"
       - "traefik.http.services.auth-middleware.loadbalancer.server.port=8080"
 ```
 
