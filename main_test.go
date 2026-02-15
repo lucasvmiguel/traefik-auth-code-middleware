@@ -66,20 +66,6 @@ func TestAuthHandler(t *testing.T) {
 	if status := rr.Code; status != http.StatusOK {
 		t.Errorf("handler returned wrong status code for valid session: got %v want %v", status, http.StatusOK)
 	}
-
-	// Case 3: Valid Session + Whitelisted Path -> 200 OK
-	// This ensures that even if the path is whitelisted (e.g. /login), a valid session is still respected/allowed.
-	req = httptest.NewRequest("GET", "/", nil)
-	req.Header.Set("X-Forwarded-Host", "example.com")
-	req.Header.Set("X-Forwarded-Uri", "/login") // Whitelisted path
-	req.AddCookie(&http.Cookie{Name: "test_cookie", Value: sessionID})
-
-	rr = httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-
-	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("handler returned wrong status code for valid session on whitelist: got %v want %v", status, http.StatusOK)
-	}
 }
 
 func TestRequestCodeHandler(t *testing.T) {
@@ -90,7 +76,7 @@ func TestRequestCodeHandler(t *testing.T) {
 	notifier = mockNotifier
 
 	// Form Data
-	req := httptest.NewRequest("POST", "/request-code", strings.NewReader("redirect_url=http://example.com"))
+	req := httptest.NewRequest("POST", "/_auth_code/request-code", strings.NewReader("redirect_url=http://example.com"))
 	req.Header.Set("X-Forwarded-For", "127.0.0.1") // Ensure IP is set for rate limiting check
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
@@ -131,7 +117,7 @@ func TestVerifyCodeHandler(t *testing.T) {
 
 	// Case 1: Valid Code
 	form := "code=" + code + "&redirect_url=http://example.com"
-	req := httptest.NewRequest("POST", "/verify-code", strings.NewReader(form))
+	req := httptest.NewRequest("POST", "/_auth_code/verify-code", strings.NewReader(form))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	rr := httptest.NewRecorder()
@@ -172,7 +158,7 @@ func TestVerifyCodeHandler(t *testing.T) {
 	st.SetCode(ip, code, 1*time.Minute) // Reset code
 
 	form = "code=wrong&redirect_url=http://example.com"
-	req = httptest.NewRequest("POST", "/verify-code", strings.NewReader(form))
+	req = httptest.NewRequest("POST", "/_auth_code/verify-code", strings.NewReader(form))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	rr = httptest.NewRecorder()

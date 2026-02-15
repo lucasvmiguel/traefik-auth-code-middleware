@@ -115,9 +115,9 @@ func run(c *cli.Context) error {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", authHandler)
-	mux.HandleFunc("/login", loginHandler)
-	mux.HandleFunc("/request-code", requestCodeHandler)
-	mux.HandleFunc("/verify-code", verifyCodeHandler)
+	mux.HandleFunc("/_auth_code/login", loginHandler)
+	mux.HandleFunc("/_auth_code/request-code", requestCodeHandler)
+	mux.HandleFunc("/_auth_code/verify-code", verifyCodeHandler)
 
 	addr := ":" + port
 	log.Printf("Starting middleware on %s", addr)
@@ -127,6 +127,13 @@ func run(c *cli.Context) error {
 // Handlers
 
 func authHandler(w http.ResponseWriter, r *http.Request) {
+	// Whitelist paths
+	uri := r.Header.Get("X-Forwarded-Uri")
+	if uri == "/_auth_code/login" || uri == "/_auth_code/request-code" || uri == "/_auth_code/verify-code" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	// Check Cookie
 	cookie, err := r.Cookie(cookieName)
 	if err == nil && st.IsSessionValid(cookie.Value) {
@@ -135,13 +142,6 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if cookie != nil {
 		log.Printf("Invalid session: %v", cookie)
-	}
-
-	// Whitelist paths
-	uri := r.Header.Get("X-Forwarded-Uri")
-	if uri == "/login" || uri == "/request-code" || uri == "/verify-code" {
-		w.WriteHeader(http.StatusOK)
-		return
 	}
 
 	// Redirect to login

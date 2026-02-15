@@ -49,7 +49,7 @@ services:
       - SESSION_DURATION=720h # 30 days
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.auth-server.rule=PathPrefix(`/login`) || PathPrefix(`/request-code`) || PathPrefix(`/verify-code`)"
+      - "traefik.http.routers.auth-server.rule=PathPrefix(`/_auth_code/login`) || PathPrefix(`/_auth_code/request-code`) || PathPrefix(`/_auth_code/verify-code`)"
       - "traefik.http.routers.auth-server.priority=100"
       - "traefik.http.routers.auth-server.tls=true"
       - "traefik.http.routers.auth-server.service=auth-middleware"
@@ -95,12 +95,12 @@ services:
    - **No Session**: Middleware returns `401 Unauthorized` and renders a **Login Page** (HTML Form).
 4. **Request Code**:
    - User clicks "Send Access Code".
-   - Browser POSTs to `/request-code`.
+   - Browser POSTs to `/_auth_code/request-code`.
    - Middleware generates a 6-digit code, securely stores it (linked to IP), and sends it to your configured notification channel (Telegram/Discord).
    - Middleware renders the **Verify Page**.
 5. **Verify Code**:
    - User enters the code.
-   - Browser POSTs to `/verify-code`.
+   - Browser POSTs to `/_auth_code/verify-code`.
    - Middleware verifies the code matches the IP and hasn't expired.
    - If valid, a secure HTTP-only session cookie is set.
    - User is redirected back to the original URL or shown a success message.
