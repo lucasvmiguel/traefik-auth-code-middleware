@@ -81,7 +81,6 @@ func (s *Store) IsSessionValid(sessionID string) bool {
 	return false
 }
 
-// Cleanup routine could be added here to remove expired codes/sessions periodically.
 func (s *Store) Cleanup() {
 	s.mu.Lock()
 	defer s.mu.Unlock()

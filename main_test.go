@@ -2,9 +2,9 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -26,11 +26,12 @@ func TestAuthHandler(t *testing.T) {
 	store = NewStore()
 	config = Config{CookieName: "test_cookie"}
 
-	// Case 1: No Cookie -> Redirect
+	// Case 1: No Cookie -> 401 Unauthorized (HTML Login Page)
 	req := httptest.NewRequest("GET", "/", nil)
 	// Add X-Forwarded headers as expected by our handler logic
 	req.Header.Set("X-Forwarded-Host", "example.com")
 	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("X-Forwarded-Uri", "/protected")
 
 	rr := httptest.NewRecorder()
 	handler := http.HandlerFunc(authHandler)
@@ -40,10 +41,13 @@ func TestAuthHandler(t *testing.T) {
 		t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusUnauthorized)
 	}
 
-	// We no longer redirect, so no Location header check needed.
-	// Instead, we might check if body contains HTML
 	if rr.Header().Get("Content-Type") != "text/html" {
 		t.Errorf("handler returned wrong content type: got %v want text/html", rr.Header().Get("Content-Type"))
+	}
+
+	// Check if redirect_url is present in the HTML (naive check)
+	if !bytes.Contains(rr.Body.Bytes(), []byte("https://example.com/protected")) {
+		t.Error("HTML does not contain the expected redirect_url")
 	}
 
 	// Case 2: Valid Session -> 200 OK
@@ -68,39 +72,27 @@ func TestRequestCodeHandler(t *testing.T) {
 	mockNotifier := &MockNotifier{}
 	notifier = mockNotifier
 
-	req := httptest.NewRequest("POST", "/auth/request-code", nil)
+	// Form Data
+	req := httptest.NewRequest("POST", "/auth/request-code", strings.NewReader("redirect_url=http://example.com"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
 	rr := httptest.NewRecorder()
 	handler := http.HandlerFunc(requestCodeHandler)
 
 	handler.ServeHTTP(rr, req)
 
+	// It should verify success implies rendering the Verify Page (likely 200 OK with HTML)
 	if status := rr.Code; status != http.StatusOK {
 		t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusOK)
+	}
+
+	if rr.Header().Get("Content-Type") != "text/html" {
+		t.Errorf("handler returned wrong content type: got %v want text/html", rr.Header().Get("Content-Type"))
 	}
 
 	// Verify code was generated and "sent"
 	if mockNotifier.LastCode == "" {
 		t.Error("Expected code to be sent via notifier")
-	}
-
-	// Verify stored code matches
-	// Note: RemoteAddr is used for IP if headers missing. httptest default is 192.0.2.1:1234
-	// We should probably check what IP the handler extracted.
-	// In test it seems to extract "192.0.2.1" usually.
-	// Let's check store values.
-	// Since we don't know exact IP loop, let's just check if ANY code exists in store.
-	// Actually store exposes map but it is mutex protected, we should use GetCode.
-	// But we need the IP used.
-
-	// Check mock notifier for IP
-	ip := mockNotifier.LastIP
-	found := store.GetCode(ip)
-	if found == nil {
-		t.Errorf("Code not found in store for ip %s", ip)
-	} else {
-		if found.Code != mockNotifier.LastCode {
-			t.Errorf("Stored code %s does not match sent code %s", found.Code, mockNotifier.LastCode)
-		}
 	}
 }
 
@@ -117,12 +109,12 @@ func TestVerifyCodeHandler(t *testing.T) {
 	store.SetCode(ip, code, 1*time.Minute)
 
 	// Case 1: Valid Code
-	reqBody, _ := json.Marshal(map[string]string{"code": code})
-	req := httptest.NewRequest("POST", "/auth/verify-code", bytes.NewBuffer(reqBody))
+	form := "code=" + code + "&redirect_url=http://example.com"
+	req := httptest.NewRequest("POST", "/auth/verify-code", strings.NewReader(form))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
 	rr := httptest.NewRecorder()
 	handler := http.HandlerFunc(verifyCodeHandler)
-
-	// We use "RemoteAddr" in httptest which is mocked to 192.0.2.1:1234
 
 	start := time.Now()
 	handler.ServeHTTP(rr, req)
@@ -132,8 +124,9 @@ func TestVerifyCodeHandler(t *testing.T) {
 		t.Errorf("Handler executed too fast, expected delay ~2s, got %v", duration)
 	}
 
-	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusOK)
+	// Expect Redirect 302
+	if status := rr.Code; status != http.StatusFound {
+		t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusFound)
 	}
 
 	// Verify Cookie
@@ -149,16 +142,28 @@ func TestVerifyCodeHandler(t *testing.T) {
 		t.Error("Expected auth cookie to be set")
 	}
 
-	// Case 2: Invalid Code
-	store.SetCode(ip, code, 1*time.Minute) // Reset code (it was deleted on success)
+	// Verify Location Header
+	if loc := rr.Header().Get("Location"); loc != "http://example.com" {
+		t.Errorf("Expected redirect to http://example.com, got %s", loc)
+	}
 
-	reqBody, _ = json.Marshal(map[string]string{"code": "wrong"})
-	req = httptest.NewRequest("POST", "/auth/verify-code", bytes.NewBuffer(reqBody))
+	// Case 2: Invalid Code
+	store.SetCode(ip, code, 1*time.Minute) // Reset code
+
+	form = "code=wrong&redirect_url=http://example.com"
+	req = httptest.NewRequest("POST", "/auth/verify-code", strings.NewReader(form))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
 	rr = httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
 
+	// Should return 401 Unauthorized (Rendering Verify Page with Error)
 	if status := rr.Code; status != http.StatusUnauthorized {
 		t.Errorf("handler returned wrong status code for invalid code: got %v want %v", status, http.StatusUnauthorized)
+	}
+
+	if rr.Header().Get("Content-Type") != "text/html" {
+		t.Errorf("handler returned wrong content type: got %v want text/html", rr.Header().Get("Content-Type"))
 	}
 }

@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"log"
 	"math/big"
@@ -54,13 +53,6 @@ func main() {
 // authHandler checks for session cookie.
 // If valid -> 200 OK (Traefik lets request through).
 // If invalid -> serves the login page directly (or redirects to it).
-// Note: For ForwardAuth, if we return 200, request proceeds.
-// If we return 401/403, Traefik blocks.
-// If we want to show a login page, we can either:
-//  1. Redirect to an external auth service (classic forward auth).
-//  2. Serve the login page directly on the unauthorized request path?
-//     No, that would mess up the content type.
-//     Better approach: Redirect to /auth/login.
 func authHandler(w http.ResponseWriter, r *http.Request) {
 	// 0. Whitelist /auth/ paths to prevent infinite redirect loops.
 	// When valid, Traefik will forward the request to the router handling /auth/
@@ -83,6 +75,7 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 	// If missing, we can't properly redirect to the correct public URL.
 	forwardedHost := r.Header.Get("X-Forwarded-Host")
 	forwardedProto := r.Header.Get("X-Forwarded-Proto")
+	forwardedUri := r.Header.Get("X-Forwarded-Uri")
 
 	if forwardedHost == "" {
 		// Fallback for internal testing or misconfig
@@ -95,14 +88,12 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 		forwardedProto = "https"
 	}
 
-	// Redirect to /auth/login on the same host
-	// redirectURL := fmt.Sprintf("%s://%s/auth/login", forwardedProto, forwardedHost)
-	// http.Redirect(w, r, redirectURL, http.StatusFound)
+	redirectURL := fmt.Sprintf("%s://%s%s", forwardedProto, forwardedHost, forwardedUri)
 
 	// Serve the login page directly with 401 status
 	w.WriteHeader(http.StatusUnauthorized)
 	w.Header().Set("Content-Type", "text/html")
-	loginTmpl.Execute(w, nil)
+	loginTmpl.Execute(w, PageData{RedirectURL: redirectURL})
 }
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
@@ -110,8 +101,9 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	redirectURL := r.URL.Query().Get("redirect_url")
 	w.Header().Set("Content-Type", "text/html")
-	loginTmpl.Execute(w, nil)
+	loginTmpl.Execute(w, PageData{RedirectURL: redirectURL})
 }
 
 func requestCodeHandler(w http.ResponseWriter, r *http.Request) {
@@ -119,6 +111,12 @@ func requestCodeHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Failed to parse form", http.StatusBadRequest)
+		return
+	}
+	redirectURL := r.FormValue("redirect_url")
 
 	ip := getIP(r)
 
@@ -129,20 +127,16 @@ func requestCodeHandler(w http.ResponseWriter, r *http.Request) {
 	// Send Code (Async or Sync? Sync is better for feedback)
 	err := notifier.SendCode(code, ip)
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "text/html")
 	if err != nil {
 		log.Printf("Failed to send code to %s: %v", ip, err)
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to send notification"})
+		loginTmpl.Execute(w, PageData{Error: "Failed to send notification", RedirectURL: redirectURL})
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Code sent"})
-}
-
-type VerifyRequest struct {
-	Code string `json:"code"`
+	// Render Verify Page
+	verifyTmpl.Execute(w, PageData{Message: "Code sent!", RedirectURL: redirectURL})
 }
 
 func verifyCodeHandler(w http.ResponseWriter, r *http.Request) {
@@ -154,34 +148,37 @@ func verifyCodeHandler(w http.ResponseWriter, r *http.Request) {
 	// Artificial delay to prevent brute force
 	time.Sleep(2 * time.Second)
 
-	var req VerifyRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
 
+	code := r.FormValue("code")
+	redirectURL := r.FormValue("redirect_url")
+
 	ip := getIP(r)
 	data := store.GetCode(ip)
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "text/html")
 
 	if data == nil {
 		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Code expired or not requested"})
+		// Return to login with error
+		loginTmpl.Execute(w, PageData{Error: "Code expired or not requested", RedirectURL: redirectURL})
 		return
 	}
 
-	if data.Code != req.Code {
+	if data.Code != code {
 		store.IncrementAttempts(ip)
 		// Potential: limit attempts
 		if data.Attempts > 5 {
 			store.DeleteCode(ip)
 			w.WriteHeader(http.StatusForbidden)
-			json.NewEncoder(w).Encode(map[string]string{"error": "Too many attempts"})
+			loginTmpl.Execute(w, PageData{Error: "Too many attempts", RedirectURL: redirectURL})
 			return
 		}
 		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid code"})
+		verifyTmpl.Execute(w, PageData{Error: "Invalid code", RedirectURL: redirectURL})
 		return
 	}
 
@@ -201,8 +198,12 @@ func verifyCodeHandler(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 	})
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Authenticated"})
+	if redirectURL != "" {
+		http.Redirect(w, r, redirectURL, http.StatusFound)
+	} else {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("Authenticated. You may now close this window."))
+	}
 }
 
 // Helpers
