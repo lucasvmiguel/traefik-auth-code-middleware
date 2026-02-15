@@ -18,7 +18,7 @@ It is designed for personal use to expose internal services securely without a c
 Configuration can be done via command-line flags or environment variables.
 
 | Flag                    | Environment Variable  | Description                       | Default                 |
-| :---------------------- | :-------------------- | :-------------------------------- | :---------------------- | --- |
+| :---------------------- | :-------------------- | :-------------------------------- | :---------------------- |
 | `--port`                | `PORT`                | HTTP Port to listen on            | `8080`                  |
 | `--telegram-bot-token`  | `TELEGRAM_BOT_TOKEN`  | Telegram Bot Token                | (Required for Telegram) |
 | `--telegram-chat-id`    | `TELEGRAM_CHAT_ID`    | Telegram Chat ID to send codes to | (Required for Telegram) |
@@ -26,7 +26,7 @@ Configuration can be done via command-line flags or environment variables.
 | `--code-expiration`     | `CODE_EXPIRATION`     | Duration code remains valid       | `5m`                    |
 | `--session-duration`    | `SESSION_DURATION`    | Duration of authenticated session | `24h`                   |
 | `--code-length`         | `CODE_LENGTH`         | Length of the generated code      | `6`                     |
-| `--cookie-name`         | `COOKIE_NAME`         | Name of the session cookie        | `traefik_auth_code`     |     |
+| `--cookie-name`         | `COOKIE_NAME`         | Name of the session cookie        | `traefik_auth_code`     |
 
 **Note**: You must provide either Telegram OR Discord credentials.
 
