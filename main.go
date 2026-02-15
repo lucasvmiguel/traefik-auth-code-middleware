@@ -140,6 +140,9 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
+	if cookie != nil {
+		log.Printf("Invalid session: %v", cookie)
+	}
 
 	// Redirect to login
 	forwardedHost := r.Header.Get("X-Forwarded-Host")

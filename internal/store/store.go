@@ -1,6 +1,7 @@
 package store
 
 import (
+	"log"
 	"sync"
 	"time"
 )
@@ -94,7 +95,12 @@ func (s *Store) IsSessionValid(id string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if expires, ok := s.sessions[id]; ok {
-		return time.Now().Before(expires)
+		if time.Now().Before(expires) {
+			return true
+		} else {
+			log.Printf("Session expired: %s (expires at %v)", id, expires)
+			return false
+		}
 	}
 	return false
 }
