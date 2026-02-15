@@ -15,17 +15,17 @@ It is designed for personal use to expose internal services securely without a c
 
 ## Configuration
 
-Configuration is done via environment variables:
+Configuration can be done via command-line flags or environment variables.
 
-| Variable              | Description                           | Default                 |
-| --------------------- | ------------------------------------- | ----------------------- |
-| `PORT`                | HTTP Port to listen on                | `8080`                  |
-| `TELEGRAM_BOT_TOKEN`  | Telegram Bot Token                    | (Required for Telegram) |
-| `TELEGRAM_CHAT_ID`    | Telegram Chat ID to send codes to     | (Required for Telegram) |
-| `DISCORD_WEBHOOK_URL` | Discord Webhook URL                   | (Required for Discord)  |
-| `CODE_EXPIRATION`     | Duration a code is valid (e.g., `5m`) | `5m`                    |
-| `SESSION_DURATION`    | Duration the session cookie is valid  | `24h`                   |
-| `COOKIE_NAME`         | Name of the session cookie            | `traefik_auth_code`     |
+| Flag                    | Environment Variable  | Description                          | Default                 |
+| :---------------------- | :-------------------- | :----------------------------------- | :---------------------- |
+| `--port`                | `PORT`                | HTTP Port to listen on               | `8080`                  |
+| `--telegram-bot-token`  | `TELEGRAM_BOT_TOKEN`  | Telegram Bot Token                   | (Required for Telegram) |
+| `--telegram-chat-id`    | `TELEGRAM_CHAT_ID`    | Telegram Chat ID to send codes to    | (Required for Telegram) |
+| `--discord-webhook-url` | `DISCORD_WEBHOOK_URL` | Discord Webhook URL                  | (Required for Discord)  |
+| `--code-expiration`     | `CODE_EXPIRATION`     | Duration a code is valid             | `5m`                    |
+| `--session-duration`    | `SESSION_DURATION`    | Duration the session cookie is valid | `24h`                   |
+| `--cookie-name`         | `COOKIE_NAME`         | Name of the session cookie           | `traefik_auth_code`     |
 
 **Note**: You must provide either Telegram OR Discord credentials.
 
@@ -87,35 +87,34 @@ services:
 
 ## How it Works
 
-1. User visits `whoami.yourdomain.com`.
-2. Traefik sends the request to `auth-middleware`.
-3. Middleware checks for a valid cookie.
-   - **Valid**: Returns 200 OK. Traefik allows the request to pass.
-   - **Invalid**: Returns 401 Unauthorized and serves the login HTML page directly.
-4. User sees the login page on `whoami.yourdomain.com`.
-5. User requests a code (AJAX POST to `/request-code`).
-6. Middleware generates a code and sends it to Telegram/Discord.
-7. User enters the code (AJAX POST to `/verify-code`).
-8. Middleware verifies code, sets a session cookie, and returns success.
-9. JavaScript on the page reloads the window.
-10. Traefik sees the valid cookie and allows access.
+1. **User Request**: User visits a protected domain (e.g., `whoami.yourdomain.com`).
+2. **Traefik ForwardAuth**: Traefik intercepts the request and forwards headers to `auth-middleware`.
+3. **Session Check**:
+   - **Valid Session**: Middleware returns `200 OK`, and Traefik lets the request through.
+   - **No Session**: Middleware returns `401 Unauthorized` and renders a **Login Page** (HTML Form).
+4. **Request Code**:
+   - User clicks "Send Access Code".
+   - Browser POSTs to `/request-code`.
+   - Middleware generates a 6-digit code, securely stores it (linked to IP), and sends it to your configured notification channel (Telegram/Discord).
+   - Middleware renders the **Verify Page**.
+5. **Verify Code**:
+   - User enters the code.
+   - Browser POSTs to `/verify-code`.
+   - Middleware verifies the code matches the IP and hasn't expired.
+   - If valid, a secure HTTP-only session cookie is set.
+   - User is redirected back to the original URL or shown a success message.
 
 ## Development
 
 ```bash
 # Run locally
-go run .
-
-# Build Docker image
-docker build -t traefik-auth-code-middleware .
+go run . --port 8081 --telegram-bot-token "..." --telegram-chat-id "..."
 ```
 
 ## Testing
 
-If you encounter issues running tests locally (e.g., `dyld: missing LC_UUID` on macOS), it is recommended to run tests inside Docker to ensure a consistent environment:
+Run unit and integration tests using standard Go tooling:
 
 ```bash
-docker build -t test-middleware-with-tests .
+go test ./...
 ```
-
-This will run all unit and integration tests during the build process.
