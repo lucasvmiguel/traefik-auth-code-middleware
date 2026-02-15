@@ -71,6 +71,7 @@ func TestAuthHandler(t *testing.T) {
 func TestRequestCodeHandler(t *testing.T) {
 	st = store.NewStore()
 	codeExpiration = 1 * time.Minute
+	codeLength = 6
 	mockNotifier := &MockNotifier{}
 	notifier = mockNotifier
 

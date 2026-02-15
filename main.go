@@ -27,6 +27,7 @@ var (
 	cookieName      string
 	codeExpiration  time.Duration
 	sessionDuration time.Duration
+	codeLength      int
 )
 
 func main() {
@@ -69,6 +70,12 @@ func main() {
 				Value:       "traefik_auth_code",
 				EnvVars:     []string{"COOKIE_NAME"},
 				Destination: &cookieName,
+			},
+			&cli.IntFlag{
+				Name:        "code-length",
+				Value:       6,
+				EnvVars:     []string{"CODE_LENGTH"},
+				Destination: &codeLength,
 			},
 		},
 		Action: run,
@@ -214,7 +221,7 @@ func requestCodeHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	code := utils.GenerateCode()
+	code := utils.GenerateCode(codeLength)
 	st.SetCode(ip, code, codeExpiration)
 
 	err := notifier.SendCode(code, ip)

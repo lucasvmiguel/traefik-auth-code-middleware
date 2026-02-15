@@ -24,10 +24,12 @@ func GetIP(r *http.Request) string {
 	return host
 }
 
-// GenerateCode creates a 6-digit numeric code for authentication.
-func GenerateCode() string {
-	n, _ := rand.Int(rand.Reader, big.NewInt(1000000))
-	return fmt.Sprintf("%06d", n)
+// GenerateCode creates a numeric code of the specified length.
+func GenerateCode(length int) string {
+	max := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(length)), nil)
+	n, _ := rand.Int(rand.Reader, max)
+	format := fmt.Sprintf("%%0%dd", length)
+	return fmt.Sprintf(format, n)
 }
 
 // GenerateSessionID creates a secure random session ID.
