@@ -48,8 +48,7 @@ services:
       - SESSION_DURATION=720h # 30 days
     labels:
       - "traefik.enable=true"
-      # 1. Router for the Auth UI pages (/auth/*)
-      - "traefik.http.routers.auth-server.rule=PathPrefix(`/auth/`)"
+      - "traefik.http.routers.auth-server.rule=PathPrefix(`/login`) || PathPrefix(`/request-code`) || PathPrefix(`/verify-code`)"
       - "traefik.http.routers.auth-server.service=auth-middleware"
       - "traefik.http.services.auth-middleware.loadbalancer.server.port=8080"
 ```
@@ -92,9 +91,9 @@ services:
    - **Valid**: Returns 200 OK. Traefik allows the request to pass.
    - **Invalid**: Returns 401 Unauthorized and serves the login HTML page directly.
 4. User sees the login page on `whoami.yourdomain.com`.
-5. User requests a code (AJAX POST to `/auth/request-code`).
+5. User requests a code (AJAX POST to `/request-code`).
 6. Middleware generates a code and sends it to Telegram/Discord.
-7. User enters the code (AJAX POST to `/auth/verify-code`).
+7. User enters the code (AJAX POST to `/verify-code`).
 8. Middleware verifies code, sets a session cookie, and returns success.
 9. JavaScript on the page reloads the window.
 10. Traefik sees the valid cookie and allows access.

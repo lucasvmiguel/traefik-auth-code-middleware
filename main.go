@@ -39,9 +39,9 @@ func main() {
 	mux.HandleFunc("/", authHandler)
 
 	// Auth flows
-	mux.HandleFunc("/auth/login", loginHandler)
-	mux.HandleFunc("/auth/request-code", requestCodeHandler)
-	mux.HandleFunc("/auth/verify-code", verifyCodeHandler)
+	mux.HandleFunc("/login", loginHandler)
+	mux.HandleFunc("/request-code", requestCodeHandler)
+	mux.HandleFunc("/verify-code", verifyCodeHandler)
 
 	addr := ":" + config.Port
 	log.Printf("Starting middleware on %s", addr)
@@ -54,9 +54,11 @@ func main() {
 // If valid -> 200 OK (Traefik lets request through).
 // If invalid -> serves the login page directly (or redirects to it).
 func authHandler(w http.ResponseWriter, r *http.Request) {
-	// 0. Whitelist /auth/ paths to prevent infinite redirect loops.
-	// When valid, Traefik will forward the request to the router handling /auth/
-	if uri := r.Header.Get("X-Forwarded-Uri"); strings.HasPrefix(uri, "/auth/") {
+	// 0. Whitelist paths to prevent infinite redirect loops.
+	// When valid, Traefik will forward the request to the router handling these paths
+	if uri := r.Header.Get("X-Forwarded-Uri"); strings.HasPrefix(uri, "/login") ||
+		strings.HasPrefix(uri, "/request-code") ||
+		strings.HasPrefix(uri, "/verify-code") {
 		w.WriteHeader(http.StatusOK)
 		return
 	}

@@ -73,7 +73,7 @@ func TestRequestCodeHandler(t *testing.T) {
 	notifier = mockNotifier
 
 	// Form Data
-	req := httptest.NewRequest("POST", "/auth/request-code", strings.NewReader("redirect_url=http://example.com"))
+	req := httptest.NewRequest("POST", "/request-code", strings.NewReader("redirect_url=http://example.com"))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	rr := httptest.NewRecorder()
@@ -110,7 +110,7 @@ func TestVerifyCodeHandler(t *testing.T) {
 
 	// Case 1: Valid Code
 	form := "code=" + code + "&redirect_url=http://example.com"
-	req := httptest.NewRequest("POST", "/auth/verify-code", strings.NewReader(form))
+	req := httptest.NewRequest("POST", "/verify-code", strings.NewReader(form))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	rr := httptest.NewRecorder()
@@ -151,7 +151,7 @@ func TestVerifyCodeHandler(t *testing.T) {
 	store.SetCode(ip, code, 1*time.Minute) // Reset code
 
 	form = "code=wrong&redirect_url=http://example.com"
-	req = httptest.NewRequest("POST", "/auth/verify-code", strings.NewReader(form))
+	req = httptest.NewRequest("POST", "/verify-code", strings.NewReader(form))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	rr = httptest.NewRecorder()

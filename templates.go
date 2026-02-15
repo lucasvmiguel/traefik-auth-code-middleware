@@ -84,7 +84,7 @@ const loginHTML = `
     <div class="container">
         <h1>🔐 Protected Resource</h1>
         
-        <form action="/auth/request-code" method="POST">
+        <form action="/request-code" method="POST">
             <input type="hidden" name="redirect_url" value="{{.RedirectURL}}">
             <p>This resource is protected. Please request an access code to continue.</p>
             {{if .Error}}<p class="message error">{{.Error}}</p>{{end}}
@@ -175,7 +175,7 @@ const verifyHTML = `
     <div class="container">
         <h1>🔐 Verify Code</h1>
         
-        <form action="/auth/verify-code" method="POST">
+        <form action="/verify-code" method="POST">
             <input type="hidden" name="redirect_url" value="{{.RedirectURL}}">
             <p>A code has been sent to your configured notification channel.</p>
             
@@ -188,7 +188,7 @@ const verifyHTML = `
         </form>
         
         <div class="resend">
-             <form action="/auth/login" method="GET" style="display:inline;">
+             <form action="/login" method="GET" style="display:inline;">
                  <input type="hidden" name="redirect_url" value="{{.RedirectURL}}">
                 <button type="submit" style="background:none; border:none; color:#64748b; font-size:0.8rem; padding:0; width:auto; cursor:pointer; text-decoration:underline;">Resend Code</button>
             </form>
