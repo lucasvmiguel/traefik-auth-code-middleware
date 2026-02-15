@@ -36,13 +36,14 @@ func TestAuthHandler(t *testing.T) {
 	handler := http.HandlerFunc(authHandler)
 	handler.ServeHTTP(rr, req)
 
-	if status := rr.Code; status != http.StatusFound {
-		t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusFound)
+	if status := rr.Code; status != http.StatusUnauthorized {
+		t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusUnauthorized)
 	}
 
-	expectedLocation := "https://example.com/auth/login"
-	if loc := rr.Header().Get("Location"); loc != expectedLocation {
-		t.Errorf("handler returned wrong location: got %v want %v", loc, expectedLocation)
+	// We no longer redirect, so no Location header check needed.
+	// Instead, we might check if body contains HTML
+	if rr.Header().Get("Content-Type") != "text/html" {
+		t.Errorf("handler returned wrong content type: got %v want text/html", rr.Header().Get("Content-Type"))
 	}
 
 	// Case 2: Valid Session -> 200 OK

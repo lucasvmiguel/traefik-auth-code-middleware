@@ -96,8 +96,13 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Redirect to /auth/login on the same host
-	redirectURL := fmt.Sprintf("%s://%s/auth/login", forwardedProto, forwardedHost)
-	http.Redirect(w, r, redirectURL, http.StatusFound)
+	// redirectURL := fmt.Sprintf("%s://%s/auth/login", forwardedProto, forwardedHost)
+	// http.Redirect(w, r, redirectURL, http.StatusFound)
+
+	// Serve the login page directly with 401 status
+	w.WriteHeader(http.StatusUnauthorized)
+	w.Header().Set("Content-Type", "text/html")
+	loginTmpl.Execute(w, nil)
 }
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {

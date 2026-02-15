@@ -66,7 +66,8 @@ Add this label to define the middleware globally or on a specific router:
 # In your dynamic config or labels:
 traefik.http.middlewares.my-auth.forwardauth.address: "http://auth-middleware:8080"
 traefik.http.middlewares.my-auth.forwardauth.trustForwardHeader: true
-traefik.http.middlewares.my-auth.forwardauth.authResponseHeaders: "X-Forwarded-User" # Optional
+# Remove authResponseHeaders if previously set to handle redirects,
+# or ensure it doesn't conflict. The middleware handles the response body.
 ```
 
 ### 3. Apply the Middleware to Your Services
@@ -89,13 +90,13 @@ services:
 2. Traefik sends the request to `auth-middleware`.
 3. Middleware checks for a valid cookie.
    - **Valid**: Returns 200 OK. Traefik allows the request to pass.
-   - **Invalid**: Returns 302 Redirect to `/auth/login`.
-4. User sees the login page.
+   - **Invalid**: Returns 401 Unauthorized and serves the login HTML page directly.
+4. User sees the login page on `whoami.yourdomain.com`.
 5. User requests a code (AJAX POST to `/auth/request-code`).
 6. Middleware generates a code and sends it to Telegram/Discord.
 7. User enters the code (AJAX POST to `/auth/verify-code`).
 8. Middleware verifies code, sets a session cookie, and returns success.
-9. Browser reloads/redirects to the original URL.
+9. JavaScript on the page reloads the window.
 10. Traefik sees the valid cookie and allows access.
 
 ## Development

@@ -140,15 +140,10 @@ const loginHTML = `
                 });
                 
                 if (res.ok) {
-                    showMessage("Access Granted! Redirecting...", "success");
+                    showMessage("Access Granted! Reloading...", "success");
                     // Reload to let the middleware pass the request essentially
                     setTimeout(() => {
-                        const urlParams = new URLSearchParams(window.location.search);
-                        const redirect = urlParams.get('rd'); // rd param from traefik forward auth usually? 
-                        // Actually, Traefik Forward Auth might not pass the original URL easily unless configured.
-                        // Standard behavior: if we set a cookie, subsequent requests to the original URL will pass.
-                        // We should instruct user to reload or redirect to root /.
-                        window.location.href = redirect || "/"; 
+                         window.location.reload(); 
                     }, 1000);
                 } else {
                     const data = await res.json();
