@@ -127,13 +127,6 @@ func run(c *cli.Context) error {
 // Handlers
 
 func authHandler(w http.ResponseWriter, r *http.Request) {
-	// Whitelist paths
-	uri := r.Header.Get("X-Forwarded-Uri")
-	if uri == "/login" || uri == "/request-code" || uri == "/verify-code" {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
 	// Check Cookie
 	cookie, err := r.Cookie(cookieName)
 	if err == nil && st.IsSessionValid(cookie.Value) {
@@ -142,6 +135,13 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if cookie != nil {
 		log.Printf("Invalid session: %v", cookie)
+	}
+
+	// Whitelist paths
+	uri := r.Header.Get("X-Forwarded-Uri")
+	if uri == "/login" || uri == "/request-code" || uri == "/verify-code" {
+		w.WriteHeader(http.StatusOK)
+		return
 	}
 
 	// Redirect to login

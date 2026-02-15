@@ -66,6 +66,20 @@ func TestAuthHandler(t *testing.T) {
 	if status := rr.Code; status != http.StatusOK {
 		t.Errorf("handler returned wrong status code for valid session: got %v want %v", status, http.StatusOK)
 	}
+
+	// Case 3: Valid Session + Whitelisted Path -> 200 OK
+	// This ensures that even if the path is whitelisted (e.g. /login), a valid session is still respected/allowed.
+	req = httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("X-Forwarded-Host", "example.com")
+	req.Header.Set("X-Forwarded-Uri", "/login") // Whitelisted path
+	req.AddCookie(&http.Cookie{Name: "test_cookie", Value: sessionID})
+
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code for valid session on whitelist: got %v want %v", status, http.StatusOK)
+	}
 }
 
 func TestRequestCodeHandler(t *testing.T) {
