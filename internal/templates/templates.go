@@ -8,6 +8,7 @@ type PageData struct {
 	Message     string
 	RedirectURL string
 	Code        string // Preserving code if needed, though usually not for security in URL
+	CodeLength  int
 }
 
 const loginHTML = `
@@ -179,7 +180,7 @@ const verifyHTML = `
             <input type="hidden" name="redirect_url" value="{{.RedirectURL}}">
             <p>A code has been sent to your configured notification channel.</p>
             
-            <input type="text" name="code" placeholder="123456" maxlength="6" autofocus required autocomplete="off">
+            <input type="text" name="code" placeholder="Enter code" maxlength="{{.CodeLength}}" minlength="{{.CodeLength}}" autofocus required autocomplete="off">
             
             {{if .Error}}<p class="message error">{{.Error}}</p>{{end}}
             {{if .Message}}<p class="message success">{{.Message}}</p>{{end}}

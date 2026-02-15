@@ -234,7 +234,7 @@ func requestCodeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	templates.VerifyTmpl.Execute(w, templates.PageData{Message: "Code sent!", RedirectURL: redirectURL})
+	templates.VerifyTmpl.Execute(w, templates.PageData{Message: "Code sent!", RedirectURL: redirectURL, CodeLength: codeLength})
 }
 
 func verifyCodeHandler(w http.ResponseWriter, r *http.Request) {
@@ -273,7 +273,7 @@ func verifyCodeHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.WriteHeader(http.StatusUnauthorized)
-		templates.VerifyTmpl.Execute(w, templates.PageData{Error: "Invalid code", RedirectURL: redirectURL})
+		templates.VerifyTmpl.Execute(w, templates.PageData{Error: "Invalid code", RedirectURL: redirectURL, CodeLength: codeLength})
 		return
 	}
 

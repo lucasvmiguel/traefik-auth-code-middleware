@@ -98,6 +98,11 @@ func TestRequestCodeHandler(t *testing.T) {
 	if mockNotifier.LastCode == "" {
 		t.Error("Expected code to be sent via notifier")
 	}
+
+	// Check for correct maxlength in HTML
+	if !strings.Contains(rr.Body.String(), `maxlength="6"`) {
+		t.Errorf("HTML does not contain expected maxlength=\"6\"")
+	}
 }
 
 func TestVerifyCodeHandler(t *testing.T) {
