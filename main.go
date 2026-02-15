@@ -1,87 +1,150 @@
 package main
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"log"
-	"math/big"
-	"net"
 	"net/http"
-	"strings"
+	"os"
 	"time"
+
+	"github.com/lucasvieira/traefik-auth-code-middleware/internal/notification"
+	"github.com/lucasvieira/traefik-auth-code-middleware/internal/notification/discord"
+	"github.com/lucasvieira/traefik-auth-code-middleware/internal/notification/telegram"
+	"github.com/lucasvieira/traefik-auth-code-middleware/internal/store"
+	"github.com/lucasvieira/traefik-auth-code-middleware/internal/utils"
+
+	"github.com/urfave/cli/v2"
 )
 
 var (
-	config   Config
-	store    *Store
-	notifier Notifier
+	st       *store.Store
+	notifier notification.Notifier
+
+	// Flags
+	port            string
+	cookieName      string
+	codeExpiration  time.Duration
+	sessionDuration time.Duration
 )
 
 func main() {
-	config = LoadConfig()
-	config.Validate()
+	app := &cli.App{
+		Name:  "traefik-auth-code-middleware",
+		Usage: "Middleware for Traefik to authenticate users via code sent to Telegram/Discord",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:        "port",
+				Value:       "8080",
+				EnvVars:     []string{"PORT"},
+				Destination: &port,
+			},
+			&cli.StringFlag{
+				Name:    "telegram-bot-token",
+				EnvVars: []string{"TELEGRAM_BOT_TOKEN"},
+			},
+			&cli.StringFlag{
+				Name:    "telegram-chat-id",
+				EnvVars: []string{"TELEGRAM_CHAT_ID"},
+			},
+			&cli.StringFlag{
+				Name:    "discord-webhook-url",
+				EnvVars: []string{"DISCORD_WEBHOOK_URL"},
+			},
+			&cli.DurationFlag{
+				Name:        "code-expiration",
+				Value:       5 * time.Minute,
+				EnvVars:     []string{"CODE_EXPIRATION"},
+				Destination: &codeExpiration,
+			},
+			&cli.DurationFlag{
+				Name:        "session-duration",
+				Value:       24 * time.Hour,
+				EnvVars:     []string{"SESSION_DURATION"},
+				Destination: &sessionDuration,
+			},
+			&cli.StringFlag{
+				Name:        "cookie-name",
+				Value:       "traefik_auth_code",
+				EnvVars:     []string{"COOKIE_NAME"},
+				Destination: &cookieName,
+			},
+		},
+		Action: run,
+	}
 
-	store = NewStore()
-	notifier = NewNotifier(config)
+	if err := app.Run(os.Args); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run(c *cli.Context) error {
+	st = store.NewStore()
 
 	// Background cleanup
 	go func() {
 		for {
 			time.Sleep(1 * time.Minute)
-			store.Cleanup()
+			st.Cleanup()
 		}
 	}()
 
+	// Setup Notifier
+	telegramToken := c.String("telegram-bot-token")
+	telegramChatID := c.String("telegram-chat-id")
+	discordWebhook := c.String("discord-webhook-url")
+
+	if telegramToken != "" && telegramChatID != "" {
+		log.Println("Using Telegram Notifier")
+		notifier = telegram.New(telegramToken, telegramChatID)
+	} else if discordWebhook != "" {
+		log.Println("Using Discord Notifier")
+		notifier = discord.New(discordWebhook)
+	} else {
+		log.Println("WARNING: No notification channel configured. Codes will be logged.")
+		notifier = &logNotifier{}
+	}
+
 	mux := http.NewServeMux()
-
-	// The main ForwardAuth handler
 	mux.HandleFunc("/", authHandler)
-
-	// Auth flows
 	mux.HandleFunc("/login", loginHandler)
 	mux.HandleFunc("/request-code", requestCodeHandler)
 	mux.HandleFunc("/verify-code", verifyCodeHandler)
 
-	addr := ":" + config.Port
+	addr := ":" + port
 	log.Printf("Starting middleware on %s", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
-		log.Fatal(err)
-	}
+	return http.ListenAndServe(addr, mux)
 }
 
-// authHandler checks for session cookie.
-// If valid -> 200 OK (Traefik lets request through).
-// If invalid -> serves the login page directly (or redirects to it).
+type logNotifier struct{}
+
+func (l *logNotifier) SendCode(code, ip string) error {
+	log.Printf("CODE GENERATED for %s: %s", ip, code)
+	return nil
+}
+
+// Handlers
+
 func authHandler(w http.ResponseWriter, r *http.Request) {
-	// 0. Whitelist paths to prevent infinite redirect loops.
-	// When valid, Traefik will forward the request to the router handling these paths
-	if uri := r.Header.Get("X-Forwarded-Uri"); strings.HasPrefix(uri, "/login") ||
-		strings.HasPrefix(uri, "/request-code") ||
-		strings.HasPrefix(uri, "/verify-code") {
+	// Whitelist paths
+	uri := r.Header.Get("X-Forwarded-Uri")
+	if uri == "/login" || uri == "/request-code" || uri == "/verify-code" {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 
-	// 1. Check Cookie.
-	cookie, err := r.Cookie(config.CookieName)
-	if err == nil && store.IsSessionValid(cookie.Value) {
+	// Check Cookie
+	cookie, err := r.Cookie(cookieName)
+	if err == nil && st.IsSessionValid(cookie.Value) {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 
-	// 2. Invalid session -> Redirect to login.
-
-	// Helper to handle redirect URL construction
-	// We rely on X-Forwarded-Host to validly redirect the user.
-	// If missing, we can't properly redirect to the correct public URL.
+	// Redirect to login
 	forwardedHost := r.Header.Get("X-Forwarded-Host")
 	forwardedProto := r.Header.Get("X-Forwarded-Proto")
 	forwardedUri := r.Header.Get("X-Forwarded-Uri")
 
 	if forwardedHost == "" {
-		// Fallback for internal testing or misconfig
-		// Just return 401 Unauthorized
 		http.Error(w, "Unauthorized (Missing X-Forwarded-Host)", http.StatusUnauthorized)
 		return
 	}
@@ -92,10 +155,11 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 
 	redirectURL := fmt.Sprintf("%s://%s%s", forwardedProto, forwardedHost, forwardedUri)
 
-	// Serve the login page directly with 401 status
 	w.WriteHeader(http.StatusUnauthorized)
 	w.Header().Set("Content-Type", "text/html")
-	loginTmpl.Execute(w, PageData{RedirectURL: redirectURL})
+	if err := loginTmpl.Execute(w, PageData{RedirectURL: redirectURL}); err != nil {
+		log.Printf("Template error: %v", err)
+	}
 }
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
@@ -120,13 +184,44 @@ func requestCodeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	redirectURL := r.FormValue("redirect_url")
 
-	ip := getIP(r)
+	ip := utils.GetIP(r)
 
-	// Create Code
-	code := generateCode()
-	store.SetCode(ip, code, config.CodeExpiration)
+	// Rate Limiting: Check if code already exists for IP
+	if existing := st.GetCode(ip); existing != nil {
+		// Prevent spamming requests.
+		// If code exists and is recent (e.g. < 1 min old), deny?
+		// For simplicity, if a code exists, we can deny generating a new one immediately
+		// or we can just overwrite it but rate limit based on time?
+		// User requirement: "make sure an ip can not request multiple codes in ashort period"
+		// We can add a "LastRequestedAt" to store, or just use existence of code.
+		// Since code expiration is likely 5 mins, we don't want to block for 5 mins.
+		// We can check if code was generated < 1 minute ago.
+		// The store doesn't expose creation time directly in GetCode (it returns CodeData).
+		// We can update CodeData to include CreatedAt or similar if needed.
+		// For now, let's assume if a code exists, we wait.
+		// Or better, update Store to handle "CanRequestCode" check.
+		// Let's rely on a primitive: if code exists, reject.
+		// BUT if user lost code, they need new one.
+		// So we should allow after some time (e.g. 60s).
+		// Let's modify Store to support this or just check ExpiresAt?
+		// CodeData has ExpiresAt. CreatedAt = ExpiresAt - CodeExpiration.
+		// Let's assume we want 1 min cooldown.
 
-	// Send Code (Async or Sync? Sync is better for feedback)
+		// If ExpiresAt is > Now + (CodeExpiration - 1min), then it was created recently.
+		// Example: Exp=5m. Created at T. Expires at T+5m.
+		// If Now < T + 1m -> Now < (ExpiresAt - 4m).
+
+		timeSinceCreation := codeExpiration - existing.ExpiresAt.Sub(time.Now())
+		if timeSinceCreation < 1*time.Minute {
+			w.WriteHeader(http.StatusTooManyRequests)
+			loginTmpl.Execute(w, PageData{Error: "Please wait before requesting a new code", RedirectURL: redirectURL})
+			return
+		}
+	}
+
+	code := utils.GenerateCode()
+	st.SetCode(ip, code, codeExpiration)
+
 	err := notifier.SendCode(code, ip)
 
 	w.Header().Set("Content-Type", "text/html")
@@ -137,7 +232,6 @@ func requestCodeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Render Verify Page
 	verifyTmpl.Execute(w, PageData{Message: "Code sent!", RedirectURL: redirectURL})
 }
 
@@ -147,8 +241,7 @@ func verifyCodeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Artificial delay to prevent brute force
-	time.Sleep(2 * time.Second)
+	time.Sleep(2 * time.Second) // Slow down brute force
 
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
@@ -158,23 +251,21 @@ func verifyCodeHandler(w http.ResponseWriter, r *http.Request) {
 	code := r.FormValue("code")
 	redirectURL := r.FormValue("redirect_url")
 
-	ip := getIP(r)
-	data := store.GetCode(ip)
+	ip := utils.GetIP(r)
+	data := st.GetCode(ip)
 
 	w.Header().Set("Content-Type", "text/html")
 
 	if data == nil {
 		w.WriteHeader(http.StatusUnauthorized)
-		// Return to login with error
 		loginTmpl.Execute(w, PageData{Error: "Code expired or not requested", RedirectURL: redirectURL})
 		return
 	}
 
 	if data.Code != code {
-		store.IncrementAttempts(ip)
-		// Potential: limit attempts
+		st.IncrementAttempts(ip)
 		if data.Attempts > 5 {
-			store.DeleteCode(ip)
+			st.DeleteCode(ip)
 			w.WriteHeader(http.StatusForbidden)
 			loginTmpl.Execute(w, PageData{Error: "Too many attempts", RedirectURL: redirectURL})
 			return
@@ -184,19 +275,18 @@ func verifyCodeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Success!
-	sessionID := generateSessionID()
-	store.AddSession(sessionID, config.SessionDuration)
-	store.DeleteCode(ip) // Consume code
+	// Success
+	sessionID := utils.GenerateSessionID()
+	st.AddSession(sessionID, sessionDuration)
+	st.DeleteCode(ip)
 
-	// Set Cookie
 	http.SetCookie(w, &http.Cookie{
-		Name:     config.CookieName,
+		Name:     cookieName,
 		Value:    sessionID,
 		Path:     "/",
-		Expires:  time.Now().Add(config.SessionDuration),
+		Expires:  time.Now().Add(sessionDuration),
 		HttpOnly: true,
-		Secure:   true, // Assuming https
+		Secure:   true,
 		SameSite: http.SameSiteLaxMode,
 	})
 
@@ -206,33 +296,4 @@ func verifyCodeHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Authenticated. You may now close this window."))
 	}
-}
-
-// Helpers
-
-func getIP(r *http.Request) string {
-	// If behind Traefik, X-Forwarded-For is reliable if strictly configured.
-	// But Traefik also sets X-Real-Ip.
-	if xrip := r.Header.Get("X-Real-Ip"); xrip != "" {
-		return xrip
-	}
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		// First IP in list
-		parts := strings.Split(xff, ",")
-		return strings.TrimSpace(parts[0])
-	}
-	host, _, _ := net.SplitHostPort(r.RemoteAddr)
-	return host
-}
-
-func generateCode() string {
-	// 6 digit numeric code
-	n, _ := rand.Int(rand.Reader, big.NewInt(1000000))
-	return fmt.Sprintf("%06d", n)
-}
-
-func generateSessionID() string {
-	b := make([]byte, 32)
-	rand.Read(b)
-	return hex.EncodeToString(b)
 }

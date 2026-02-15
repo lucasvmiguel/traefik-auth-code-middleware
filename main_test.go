@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/lucasvieira/traefik-auth-code-middleware/internal/store"
 )
 
 // Mock Notifier
@@ -23,8 +25,8 @@ func (m *MockNotifier) SendCode(code, ip string) error {
 
 func TestAuthHandler(t *testing.T) {
 	// Setup
-	store = NewStore()
-	config = Config{CookieName: "test_cookie"}
+	st = store.NewStore()
+	cookieName = "test_cookie"
 
 	// Case 1: No Cookie -> 401 Unauthorized (HTML Login Page)
 	req := httptest.NewRequest("GET", "/", nil)
@@ -52,7 +54,7 @@ func TestAuthHandler(t *testing.T) {
 
 	// Case 2: Valid Session -> 200 OK
 	sessionID := "valid_session"
-	store.AddSession(sessionID, 1*time.Minute)
+	st.AddSession(sessionID, 1*time.Minute)
 
 	req = httptest.NewRequest("GET", "/", nil)
 	req.Header.Set("X-Forwarded-Host", "example.com")
@@ -67,13 +69,14 @@ func TestAuthHandler(t *testing.T) {
 }
 
 func TestRequestCodeHandler(t *testing.T) {
-	store = NewStore()
-	config = Config{CodeExpiration: 1 * time.Minute}
+	st = store.NewStore()
+	codeExpiration = 1 * time.Minute
 	mockNotifier := &MockNotifier{}
 	notifier = mockNotifier
 
 	// Form Data
 	req := httptest.NewRequest("POST", "/request-code", strings.NewReader("redirect_url=http://example.com"))
+	req.Header.Set("X-Forwarded-For", "127.0.0.1") // Ensure IP is set for rate limiting check
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	rr := httptest.NewRecorder()
@@ -97,16 +100,14 @@ func TestRequestCodeHandler(t *testing.T) {
 }
 
 func TestVerifyCodeHandler(t *testing.T) {
-	store = NewStore()
-	config = Config{
-		SessionDuration: 1 * time.Minute,
-		CookieName:      "auth_cookie",
-	}
+	st = store.NewStore()
+	sessionDuration = 1 * time.Minute
+	cookieName = "auth_cookie"
 
 	// Setup Code
 	ip := "192.0.2.1" // Default remote addr IP in httptest
 	code := "123456"
-	store.SetCode(ip, code, 1*time.Minute)
+	st.SetCode(ip, code, 1*time.Minute)
 
 	// Case 1: Valid Code
 	form := "code=" + code + "&redirect_url=http://example.com"
@@ -148,7 +149,7 @@ func TestVerifyCodeHandler(t *testing.T) {
 	}
 
 	// Case 2: Invalid Code
-	store.SetCode(ip, code, 1*time.Minute) // Reset code
+	st.SetCode(ip, code, 1*time.Minute) // Reset code
 
 	form = "code=wrong&redirect_url=http://example.com"
 	req = httptest.NewRequest("POST", "/verify-code", strings.NewReader(form))

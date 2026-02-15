@@ -49,6 +49,8 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.auth-server.rule=PathPrefix(`/login`) || PathPrefix(`/request-code`) || PathPrefix(`/verify-code`)"
+      - "traefik.http.routers.auth-server.priority=100"
+      - "traefik.http.routers.auth-server.tls=true"
       - "traefik.http.routers.auth-server.service=auth-middleware"
       - "traefik.http.services.auth-middleware.loadbalancer.server.port=8080"
 ```
