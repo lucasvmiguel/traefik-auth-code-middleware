@@ -81,8 +81,8 @@ const loginHTML = `
         .footer { margin-top: 2rem; font-size: 0.75rem; color: #64748b; }
         .spinner {
             display: none;
-            width: 1.25rem;
-            height: 1.25rem;
+            width: 1rem;
+            height: 1rem;
             border: 3px solid rgba(255, 255, 255, 0.3);
             border-radius: 50%;
             border-top-color: white;
