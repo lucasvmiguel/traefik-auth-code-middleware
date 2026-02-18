@@ -79,6 +79,29 @@ const loginHTML = `
         .error { color: var(--error-color); }
         .success { color: var(--success-color); }
         .footer { margin-top: 2rem; font-size: 0.75rem; color: #64748b; }
+        .spinner {
+            display: none;
+            width: 1.25rem;
+            height: 1.25rem;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        button.loading {
+            pointer-events: none;
+            opacity: 0.7;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+        }
+        button.loading .spinner {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -90,11 +113,29 @@ const loginHTML = `
             <p>This resource is protected. Please request an access code to continue.</p>
             {{if .Error}}<p class="message error">{{.Error}}</p>{{end}}
             {{if .Message}}<p class="message success">{{.Message}}</p>{{end}}
-            <button type="submit">Send Access Code</button>
+            <button type="submit">
+                <span class="spinner"></span>
+                <span class="btn-text">Send Access Code</span>
+            </button>
         </form>
 
         <div class="footer">Traefik Auth Middleware</div>
     </div>
+    <script>
+        document.querySelectorAll('form').forEach(form => {
+            form.addEventListener('submit', function(e) {
+                if (this.dataset.submitted === "true") {
+                    e.preventDefault();
+                    return;
+                }
+                const btn = this.querySelector('button[type="submit"]');
+                if (btn) {
+                    btn.classList.add('loading');
+                    this.dataset.submitted = "true";
+                }
+            });
+        });
+    </script>
 </body>
 </html>
 `
@@ -170,6 +211,29 @@ const verifyHTML = `
         .resend { margin-top: 10px; }
         .resend a { color: #64748b; font-size: 0.8rem; text-decoration: none; }
         .resend a:hover { text-decoration: underline; }
+        .spinner {
+            display: none;
+            width: 1.25rem;
+            height: 1.25rem;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        button.loading {
+            pointer-events: none;
+            opacity: 0.7;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+        }
+        button.loading .spinner {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -185,7 +249,10 @@ const verifyHTML = `
             {{if .Error}}<p class="message error">{{.Error}}</p>{{end}}
             {{if .Message}}<p class="message success">{{.Message}}</p>{{end}}
             
-            <button type="submit">Verify Code</button>
+            <button type="submit">
+                <span class="spinner"></span>
+                <span class="btn-text">Verify Code</span>
+            </button>
         </form>
         
         <div class="resend">
@@ -197,6 +264,21 @@ const verifyHTML = `
 
         <div class="footer">Traefik Auth Middleware</div>
     </div>
+    <script>
+        document.querySelectorAll('form').forEach(form => {
+            form.addEventListener('submit', function(e) {
+                if (this.dataset.submitted === "true") {
+                    e.preventDefault();
+                    return;
+                }
+                const btn = this.querySelector('button[type="submit"]');
+                if (btn) {
+                    btn.classList.add('loading');
+                    this.dataset.submitted = "true";
+                }
+            });
+        });
+    </script>
 </body>
 </html>
 `
